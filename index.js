@@ -13,16 +13,33 @@ const PORT = process.env.PORT || 5001;
 
 // --- Middleware ---
 
-// Configure CORS to allow communication from your frontend
+// Configure CORS to allow communication from your Vercel frontend
+// Note: We include an array of allowed origins to handle potential protocol/trailing slash differences
+const allowedOrigins = [
+    // Your Vercel production domain (without trailing slash)
+    'https://portfolio-shahid-frontend.vercel.app',
+    // Local development environment
+    'http://localhost:5173',
+    'http://localhost:5001' 
+];
+
 app.use(cors({
-    // IMPORTANT: Update this to your React app's URL when deploying
-    origin: 'https://portfolio-shahid-frontend.vercel.app/' 
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        // Check if the origin is in the allowed list
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    }
 }));
 
 app.use(express.json());
 
 // --- Nodemailer Transporter Setup ---
-// Use environment variables for secure authentication
+// Uses environment variables set on the hosting platform (e.g., Render)
 const transporter = nodemailer.createTransport({
     service: 'gmail', 
     auth: {
@@ -34,7 +51,7 @@ const transporter = nodemailer.createTransport({
 // Verify the transporter connection (good practice)
 transporter.verify((error, success) => {
     if (error) {
-        console.error('Error with Nodemailer transporter. Check EMAIL_USER and EMAIL_PASS in .env. Full error:', error);
+        console.error('Nodemailer Setup Error: Check EMAIL_USER/EMAIL_PASS on hosting platform. Full error:', error);
     } else {
         console.log('Nodemailer is ready to send emails. Server port:', PORT);
     }
@@ -44,23 +61,17 @@ transporter.verify((error, success) => {
 // --- API Routes ---
 
 // @route   POST /api/contact
-// @desc    Receive contact form data and send an email
-// @access  Public
 app.post('/api/contact', async (req, res) => {
-    // Destructure the form data from the request body
     const { name, email, message } = req.body;
 
-    // Basic validation
     if (!name || !email || !message) {
         return res.status(400).json({ msg: 'Please enter all fields (Name, Email, and Message).' });
     }
 
-    // Define the email options
     const mailOptions = {
-        // Sender's name and email, using the contact form user's email as the reply-to
         from: `"${name} (via Portfolio Form)" <${process.env.EMAIL_USER}>`, 
-        replyTo: email, // This allows you to reply directly to the sender
-        to: process.env.EMAIL_USER,    // Your email address (where you'll receive the message)
+        replyTo: email, // Reply will go to the person who filled out the form
+        to: process.env.EMAIL_USER,    // This is YOUR email (where you receive the contact)
         subject: `New Portfolio Contact from ${name}`,
         html: `
             <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
@@ -75,15 +86,11 @@ app.post('/api/contact', async (req, res) => {
     };
 
     try {
-        // Send the email
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Email sent: %s', info.messageId);
-        // Send a success response
+        await transporter.sendMail(mailOptions);
         res.status(200).json({ msg: 'Thank you for your message! I will get back to you soon.' });
     } catch (error) {
         console.error('Error sending email:', error);
-        // Send a server error response
-        res.status(500).json({ msg: 'Sorry, there was an error sending your message. Please verify your .env settings.' });
+        res.status(500).json({ msg: 'Sorry, the message could not be sent. Please check server logs for Nodemailer error.' });
     }
 });
 
