@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 5001;
 // Configure CORS to allow communication from your frontend
 app.use(cors({
     // IMPORTANT: Update this to your React app's URL when deploying
-    origin: 'http://localhost:5173' 
+    origin: 'https://portfolio-shahid-frontend.vercel.app/' 
 }));
 
 app.use(express.json());
